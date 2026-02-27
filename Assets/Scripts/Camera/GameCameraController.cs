@@ -28,6 +28,14 @@ public sealed class GameCameraController : MonoBehaviour
     [SerializeField] private bool requireRightMouseButton = true;
     [SerializeField] private TouchLookDragRegion touchLookRegion;
 
+    [Header("Auto Follow")]
+    [SerializeField] private bool autoFollowBehindMovement = true;
+    [SerializeField] private PlayerMovementController movementController;
+    [SerializeField] private float autoFollowDelay = 0f;
+    [SerializeField] private float autoFollowYawSharpness = 7f;
+    [SerializeField] private float autoFollowDirectionThreshold = 0.08f;
+    [SerializeField] private float manualLookThreshold = 0.001f;
+
     [Header("Smoothing")]
     [SerializeField] private float followSmoothTime = 0.14f;
     [SerializeField] private float rotationSharpness = 14f;
@@ -52,11 +60,13 @@ public sealed class GameCameraController : MonoBehaviour
     private bool _hasSmoothedState;
     private bool _orbitInitialized;
     private bool _warnedMissingTarget;
+    private float _lastManualLookTime = float.NegativeInfinity;
 
     public void SetTarget(Transform newTarget, Transform newIgnoreRoot = null)
     {
         target = newTarget;
         _resolvedTarget = newTarget;
+        movementController = null;
 
         if (newIgnoreRoot != null)
         {
@@ -69,6 +79,7 @@ public sealed class GameCameraController : MonoBehaviour
 
         _warnedMissingTarget = false;
         _hasSmoothedState = false;
+        ResolveMovementControllerIfNeeded();
         SnapNow();
     }
 
@@ -90,6 +101,7 @@ public sealed class GameCameraController : MonoBehaviour
     private void Awake()
     {
         ResolveTargetIfNeeded();
+        ResolveMovementControllerIfNeeded();
         InitializeOrbitIfNeeded();
     }
 
@@ -114,6 +126,10 @@ public sealed class GameCameraController : MonoBehaviour
         pitchMin = Mathf.Clamp(pitchMin, -89f, 89f);
         pitchMax = Mathf.Clamp(pitchMax, pitchMin, 89f);
         initialPitch = Mathf.Clamp(initialPitch, pitchMin, pitchMax);
+        autoFollowDelay = Mathf.Max(0f, autoFollowDelay);
+        autoFollowYawSharpness = Mathf.Max(0.01f, autoFollowYawSharpness);
+        autoFollowDirectionThreshold = Mathf.Clamp(autoFollowDirectionThreshold, 0.001f, 2f);
+        manualLookThreshold = Mathf.Clamp(manualLookThreshold, 0.000001f, 1f);
 
         followSmoothTime = Mathf.Max(0.01f, followSmoothTime);
         rotationSharpness = Mathf.Max(0.01f, rotationSharpness);
@@ -163,12 +179,14 @@ public sealed class GameCameraController : MonoBehaviour
                 ignoreRoot = target.root;
             }
 
+            ResolveMovementControllerIfNeeded();
             _warnedMissingTarget = false;
             return true;
         }
 
         if (_resolvedTarget != null)
         {
+            ResolveMovementControllerIfNeeded();
             return true;
         }
 
@@ -192,6 +210,7 @@ public sealed class GameCameraController : MonoBehaviour
             ignoreRoot = playerObject.transform;
         }
 
+        ResolveMovementControllerIfNeeded();
         _warnedMissingTarget = false;
         return true;
     }
@@ -225,7 +244,8 @@ public sealed class GameCameraController : MonoBehaviour
 
         if (!snap)
         {
-            ApplyOrbitInput(deltaTime);
+            bool hadManualLook = ApplyOrbitInput(deltaTime);
+            ApplyAutoFollow(deltaTime, hadManualLook);
         }
 
         Vector3 lookPoint = effectiveTarget.position + lookAtOffset;
@@ -276,11 +296,120 @@ public sealed class GameCameraController : MonoBehaviour
         transform.SetPositionAndRotation(_smoothedPosition, _smoothedRotation);
     }
 
-    private void ApplyOrbitInput(float deltaTime)
+    private bool ApplyOrbitInput(float deltaTime)
     {
         Vector2 lookDelta = ReadLookDelta(deltaTime);
+        float manualLookThresholdSqr = manualLookThreshold * manualLookThreshold;
+        bool hasManualLook = lookDelta.sqrMagnitude > manualLookThresholdSqr;
+        if (hasManualLook)
+        {
+            _lastManualLookTime = Time.time;
+        }
+
         _orbitYaw += lookDelta.x;
         _orbitPitch = Mathf.Clamp(_orbitPitch - lookDelta.y, pitchMin, pitchMax);
+        return hasManualLook;
+    }
+
+    private void ApplyAutoFollow(float deltaTime, bool hadManualLook)
+    {
+        if (!autoFollowBehindMovement || hadManualLook)
+        {
+            return;
+        }
+
+        if ((Time.time - _lastManualLookTime) < autoFollowDelay)
+        {
+            return;
+        }
+
+        if (!TryResolveAutoFollowDirection(out Vector3 followDirection))
+        {
+            return;
+        }
+
+        float targetYaw = Mathf.Atan2(followDirection.x, followDirection.z) * Mathf.Rad2Deg;
+        float yawLerp = 1f - Mathf.Exp(-autoFollowYawSharpness * deltaTime);
+        _orbitYaw = Mathf.LerpAngle(_orbitYaw, targetYaw, yawLerp);
+    }
+
+    private bool TryResolveAutoFollowDirection(out Vector3 followDirection)
+    {
+        followDirection = Vector3.zero;
+        float minDirectionSqr = autoFollowDirectionThreshold * autoFollowDirectionThreshold;
+
+        ResolveMovementControllerIfNeeded();
+        if (movementController != null)
+        {
+            Vector3 planarVelocity = movementController.CurrentPlanarVelocity;
+            planarVelocity.y = 0f;
+            if (planarVelocity.sqrMagnitude > minDirectionSqr)
+            {
+                followDirection = planarVelocity.normalized;
+                return true;
+            }
+
+            Vector3 desiredMove = movementController.CurrentDesiredMove;
+            desiredMove.y = 0f;
+            if (desiredMove.sqrMagnitude > minDirectionSqr)
+            {
+                followDirection = desiredMove.normalized;
+                return true;
+            }
+
+            Vector3 playerForward = movementController.transform.forward;
+            playerForward.y = 0f;
+            if (playerForward.sqrMagnitude > minDirectionSqr)
+            {
+                followDirection = playerForward.normalized;
+                return true;
+            }
+        }
+
+        if (ignoreRoot != null)
+        {
+            Vector3 ignoreForward = ignoreRoot.forward;
+            ignoreForward.y = 0f;
+            if (ignoreForward.sqrMagnitude > minDirectionSqr)
+            {
+                followDirection = ignoreForward.normalized;
+                return true;
+            }
+        }
+
+        if (!TryGetEffectiveTarget(out Transform effectiveTarget))
+        {
+            return false;
+        }
+
+        Vector3 targetForward = effectiveTarget.forward;
+        targetForward.y = 0f;
+        if (targetForward.sqrMagnitude > minDirectionSqr)
+        {
+            followDirection = targetForward.normalized;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ResolveMovementControllerIfNeeded()
+    {
+        if (!TryGetEffectiveTarget(out Transform effectiveTarget))
+        {
+            return;
+        }
+
+        if (movementController != null)
+        {
+            Transform movementTransform = movementController.transform;
+            if (movementTransform == effectiveTarget || effectiveTarget.IsChildOf(movementTransform))
+            {
+                return;
+            }
+        }
+
+        movementController = effectiveTarget.GetComponentInParent<PlayerMovementController>();
     }
 
     private Vector2 ReadLookDelta(float deltaTime)

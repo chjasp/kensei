@@ -282,14 +282,16 @@ public sealed class PlayerMovementController : MonoBehaviour
             return;
         }
 
-        Transform targetRoot = visualRoot != null ? visualRoot : transform;
-
-        Quaternion targetRotation =
-            Quaternion.LookRotation(desiredMoveDirection.normalized, Vector3.up) *
-            Quaternion.Euler(0f, visualYawOffset, 0f);
-
         float rotationLerp = 1f - Mathf.Exp(-Mathf.Max(0.01f, turnSharpness) * Time.deltaTime);
-        targetRoot.rotation = Quaternion.Slerp(targetRoot.rotation, targetRotation, rotationLerp);
+
+        Quaternion facingRotation = Quaternion.LookRotation(desiredMoveDirection.normalized, Vector3.up);
+        transform.rotation = Quaternion.Slerp(transform.rotation, facingRotation, rotationLerp);
+
+        if (visualRoot != null && visualRoot != transform)
+        {
+            Quaternion visualRotation = facingRotation * Quaternion.Euler(0f, visualYawOffset, 0f);
+            visualRoot.rotation = Quaternion.Slerp(visualRoot.rotation, visualRotation, rotationLerp);
+        }
     }
 
     private void OnValidate()
