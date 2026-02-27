@@ -1,12 +1,25 @@
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(CharacterController))]
 public sealed class PlayerMovementController : MonoBehaviour
 {
+    [Header("References")]
     [SerializeField] private VirtualJoystick joystick;
     [SerializeField] private Transform cameraTransform;
     [SerializeField] private Transform visualRoot;
+
+    [Header("Input Fallback")]
+#if ENABLE_INPUT_SYSTEM
+    [SerializeField] private InputActionAsset inputActions;
+#endif
+    [SerializeField] private string moveActionMapName = "Player";
+    [SerializeField] private string moveActionName = "Move";
+
+    [Header("Movement")]
     [SerializeField] private float visualYawOffset = 90f;
     [SerializeField] private float maxSpeed = 6.75f;
     [SerializeField] private float acceleration = 26f;
@@ -19,10 +32,60 @@ public sealed class PlayerMovementController : MonoBehaviour
     private CharacterController _characterController;
     private Vector3 _planarVelocity;
     private float _verticalVelocity;
-    private bool _warnedMissingJoystick;
     private bool _warnedMissingCamera;
+    private bool _warnedMissingInput;
+    private bool _warnedMissingMoveAction;
+
+#if ENABLE_INPUT_SYSTEM
+    private InputAction _moveAction;
+#endif
 
     public void SetDependencies(VirtualJoystick joystickReference, Transform cameraReference, Transform visualReference)
+    {
+        SetDependencies(joystickReference, cameraReference, visualReference, null, moveActionMapName, moveActionName);
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    public void SetDependencies(
+        VirtualJoystick joystickReference,
+        Transform cameraReference,
+        Transform visualReference,
+        InputActionAsset inputActionsReference,
+        string actionMapName = "Player",
+        string actionName = "Move")
+    {
+        joystick = joystickReference;
+        cameraTransform = cameraReference;
+        if (visualReference != null)
+        {
+            visualRoot = visualReference;
+        }
+
+        if (inputActionsReference != null)
+        {
+            inputActions = inputActionsReference;
+        }
+
+        if (!string.IsNullOrWhiteSpace(actionMapName))
+        {
+            moveActionMapName = actionMapName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(actionName))
+        {
+            moveActionName = actionName;
+        }
+
+        ResolveMoveAction();
+    }
+#else
+    public void SetDependencies(
+        VirtualJoystick joystickReference,
+        Transform cameraReference,
+        Transform visualReference,
+        Object _inputActionsReference,
+        string _actionMapName = "Player",
+        string _actionName = "Move")
     {
         joystick = joystickReference;
         cameraTransform = cameraReference;
@@ -31,6 +94,7 @@ public sealed class PlayerMovementController : MonoBehaviour
             visualRoot = visualReference;
         }
     }
+#endif
 
     private void Reset()
     {
@@ -54,6 +118,30 @@ public sealed class PlayerMovementController : MonoBehaviour
         {
             cameraTransform = Camera.main.transform;
         }
+
+#if ENABLE_INPUT_SYSTEM
+        ResolveMoveAction();
+#endif
+    }
+
+    private void OnEnable()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (_moveAction != null)
+        {
+            _moveAction.Enable();
+        }
+#endif
+    }
+
+    private void OnDisable()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (_moveAction != null)
+        {
+            _moveAction.Disable();
+        }
+#endif
     }
 
     private void Update()
@@ -88,24 +176,46 @@ public sealed class PlayerMovementController : MonoBehaviour
             _verticalVelocity = groundedVerticalVelocity;
         }
 
-        UpdateVisualFacing();
+        UpdateVisualFacing(desiredMove);
     }
 
     private Vector2 ReadInput()
     {
-        if (joystick == null)
-        {
-            if (!_warnedMissingJoystick)
-            {
-                Debug.LogWarning("PlayerMovementController has no VirtualJoystick reference. Movement input is disabled.", this);
-                _warnedMissingJoystick = true;
-            }
+        float thresholdSqr = inputThreshold * inputThreshold;
 
-            return Vector2.zero;
+        if (joystick != null)
+        {
+            Vector2 joystickInput = joystick.Value;
+            if (joystickInput.sqrMagnitude > thresholdSqr)
+            {
+                _warnedMissingInput = false;
+                return joystickInput;
+            }
         }
 
-        _warnedMissingJoystick = false;
-        return joystick.Value;
+        Vector2 fallbackInput = ReadActionInput();
+        if (fallbackInput.sqrMagnitude > thresholdSqr)
+        {
+            _warnedMissingInput = false;
+            return fallbackInput;
+        }
+
+        if (joystick == null && !HasActionInputConfigured())
+        {
+            if (!_warnedMissingInput)
+            {
+                Debug.LogWarning(
+                    "PlayerMovementController has no active movement input source. Assign a VirtualJoystick or InputActionAsset fallback.",
+                    this);
+                _warnedMissingInput = true;
+            }
+        }
+        else
+        {
+            _warnedMissingInput = false;
+        }
+
+        return Vector2.zero;
     }
 
     private Vector3 ResolveMoveDirection(Vector2 input)
@@ -149,19 +259,18 @@ public sealed class PlayerMovementController : MonoBehaviour
         return Vector3.ClampMagnitude(moveDirection, 1f);
     }
 
-    private void UpdateVisualFacing()
+    private void UpdateVisualFacing(Vector3 desiredMoveDirection)
     {
-        Transform targetRoot = visualRoot != null ? visualRoot : transform;
-
-        Vector3 facingDirection = new Vector3(_planarVelocity.x, 0f, _planarVelocity.z);
         float thresholdSqr = inputThreshold * inputThreshold;
-        if (facingDirection.sqrMagnitude <= thresholdSqr)
+        if (desiredMoveDirection.sqrMagnitude <= thresholdSqr)
         {
             return;
         }
 
+        Transform targetRoot = visualRoot != null ? visualRoot : transform;
+
         Quaternion targetRotation =
-            Quaternion.LookRotation(facingDirection.normalized, Vector3.up) *
+            Quaternion.LookRotation(desiredMoveDirection.normalized, Vector3.up) *
             Quaternion.Euler(0f, visualYawOffset, 0f);
 
         float rotationLerp = 1f - Mathf.Exp(-Mathf.Max(0.01f, turnSharpness) * Time.deltaTime);
@@ -175,5 +284,94 @@ public sealed class PlayerMovementController : MonoBehaviour
         deceleration = Mathf.Max(0.01f, deceleration);
         turnSharpness = Mathf.Max(0.01f, turnSharpness);
         inputThreshold = Mathf.Clamp(inputThreshold, 0f, 1f);
+
+#if ENABLE_INPUT_SYSTEM
+        if (Application.isPlaying)
+        {
+            ResolveMoveAction();
+        }
+#endif
     }
+
+    private bool HasActionInputConfigured()
+    {
+#if ENABLE_INPUT_SYSTEM
+        return _moveAction != null;
+#else
+        return false;
+#endif
+    }
+
+    private Vector2 ReadActionInput()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (_moveAction == null)
+        {
+            ResolveMoveAction();
+            if (_moveAction == null)
+            {
+                return Vector2.zero;
+            }
+        }
+
+        return _moveAction.ReadValue<Vector2>();
+#else
+        return Vector2.zero;
+#endif
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    private void ResolveMoveAction()
+    {
+        InputAction previousMoveAction = _moveAction;
+        _moveAction = null;
+
+        if (inputActions == null)
+        {
+            _warnedMissingMoveAction = false;
+            return;
+        }
+
+        InputActionMap actionMap = inputActions.FindActionMap(moveActionMapName, throwIfNotFound: false);
+        if (actionMap == null)
+        {
+            if (!_warnedMissingMoveAction)
+            {
+                Debug.LogWarning(
+                    $"PlayerMovementController could not find action map '{moveActionMapName}' in assigned InputActionAsset.",
+                    this);
+                _warnedMissingMoveAction = true;
+            }
+
+            return;
+        }
+
+        InputAction resolvedMoveAction = actionMap.FindAction(moveActionName, throwIfNotFound: false);
+        if (resolvedMoveAction == null)
+        {
+            if (!_warnedMissingMoveAction)
+            {
+                Debug.LogWarning(
+                    $"PlayerMovementController could not find action '{moveActionName}' in map '{moveActionMapName}'.",
+                    this);
+                _warnedMissingMoveAction = true;
+            }
+
+            return;
+        }
+
+        _warnedMissingMoveAction = false;
+        _moveAction = resolvedMoveAction;
+
+        if (previousMoveAction != null && previousMoveAction != _moveAction && previousMoveAction.enabled)
+        {
+            previousMoveAction.Disable();
+        }
+
+        if (isActiveAndEnabled && !_moveAction.enabled)
+        {
+            _moveAction.Enable();
+        }
+    }
+#endif
 }

@@ -829,7 +829,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: 
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -1170,7 +1170,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 0.22}
@@ -2072,6 +2072,9 @@ MonoBehaviour:
   joystick: {fileID: 1393581905}
   cameraTransform: {fileID: 961739753}
   visualRoot: {fileID: 96578403}
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  moveActionMapName: Player
+  moveActionName: Move
   visualYawOffset: 90
   maxSpeed: 6.75
   acceleration: 26
@@ -2263,17 +2266,18 @@ RectTransform:
   m_GameObject: {fileID: 769407667}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1393581911}
   - {fileID: 1393581904}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!4 &772459222 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1541575025061252247, guid: 8fdefb0f141e5424db392a3c1e982881, type: 3}
@@ -3613,6 +3617,95 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 9214187401342927012, guid: 63d95c3f51408bc4b878deba24832235, type: 3}
   m_PrefabInstance: {fileID: 325167348}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1393581910
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1393581911}
+  - component: {fileID: 1393581914}
+  - component: {fileID: 1393581913}
+  - component: {fileID: 1393581912}
+  m_Layer: 5
+  m_Name: LookDragRegion
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1393581911
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1393581910}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 769407671}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1393581912
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1393581910}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c957b14b6a6401abb91e9fa133306bd, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::TouchLookDragRegion
+  allowMouseInEditor: 0
+--- !u!114 &1393581913
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1393581910}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1393581914
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1393581910}
+  m_CullTransparentMesh: 1
 --- !u!1 &1393581903
 GameObject:
   m_ObjectHideFlags: 0
@@ -5285,18 +5378,29 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 712931334}
   ignoreRoot: {fileID: 712931334}
-  targetOffset: {x: 0, y: 1.55, z: 0}
-  pitch: 50
-  yaw: 45
-  distance: 11.5
-  followSharpness: 12
+  lookAtOffset: {x: 0, y: 1.55, z: 0}
+  shoulderRightOffset: 1.5
+  shoulderUpOffset: 2
+  followDistance: 4
+  initialYaw: 0
+  initialPitch: 20
+  pitchMin: -20
+  pitchMax: 60
+  gamepadLookSensitivity: {x: 180, y: 140}
+  mouseLookSensitivity: {x: 0.18, y: 0.14}
+  touchLookSensitivity: {x: 0.16, y: 0.12}
+  requireRightMouseButton: 1
+  touchLookRegion: {fileID: 1393581912}
+  followSmoothTime: 0.14
   rotationSharpness: 14
   obstructionMask:
     serializedVersion: 2
     m_Bits: 4294967295
   obstructionRadius: 0.35
   obstructionBuffer: 0.2
-  minObstructedDistance: 3
+  minObstructedDistance: 0.6
+  obstructedDistanceSharpness: 24
+  clearDistanceSharpness: 6
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

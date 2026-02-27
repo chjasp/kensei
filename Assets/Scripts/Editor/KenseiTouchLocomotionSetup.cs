@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -16,6 +17,10 @@ namespace Kensei.Editor
         private const string JoystickRootName = "MoveJoystick";
         private const string JoystickBackgroundName = "JoystickBackground";
         private const string JoystickHandleName = "JoystickHandle";
+        private const string LookDragRegionName = "LookDragRegion";
+        private const string InputActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
+        private const string PlayerActionMapName = "Player";
+        private const string MoveActionName = "Move";
 
         [MenuItem("Tools/Kensei/Apply Touch Locomotion Setup")]
         public static void ApplyFromMenu()
@@ -75,13 +80,37 @@ namespace Kensei.Editor
             Transform visualRoot = ResolveVisualRoot(player.transform);
 
             EnsureEventSystem();
-            VirtualJoystick joystick = EnsureTouchHud();
+            VirtualJoystick joystick = EnsureTouchHud(out TouchLookDragRegion lookDragRegion);
 
-            movement.SetDependencies(joystick, cameraTransform, visualRoot);
+            InputActionAsset inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsAssetPath);
+            if (inputActions == null)
+            {
+                Debug.LogWarning($"Could not load InputActionAsset at '{InputActionsAssetPath}'. Falling back to joystick-only movement.");
+            }
+            movement.SetDependencies(
+                joystick,
+                cameraTransform,
+                visualRoot,
+                inputActions,
+                PlayerActionMapName,
+                MoveActionName);
+
+            GameCameraController cameraController = cameraTransform != null
+                ? cameraTransform.GetComponent<GameCameraController>()
+                : null;
+            if (cameraController != null)
+            {
+                cameraController.SetTouchLookRegion(lookDragRegion);
+                EditorUtility.SetDirty(cameraController);
+            }
 
             EditorUtility.SetDirty(player);
             EditorUtility.SetDirty(movement);
             EditorUtility.SetDirty(joystick);
+            if (lookDragRegion != null)
+            {
+                EditorUtility.SetDirty(lookDragRegion);
+            }
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
 
@@ -185,7 +214,7 @@ namespace Kensei.Editor
                    inputSystemUiInputModule.cancel.action == null;
         }
 
-        private static VirtualJoystick EnsureTouchHud()
+        private static VirtualJoystick EnsureTouchHud(out TouchLookDragRegion lookDragRegion)
         {
             GameObject canvasObject = GameObject.Find(CanvasName);
             if (canvasObject == null)
@@ -215,6 +244,35 @@ namespace Kensei.Editor
 
             GraphicRaycaster graphicRaycaster = canvasObject.GetComponent<GraphicRaycaster>();
             graphicRaycaster.ignoreReversedGraphics = true;
+
+            GameObject lookDragRegionObject = FindOrCreateChild(canvasObject.transform, LookDragRegionName);
+            lookDragRegionObject.layer = LayerMask.NameToLayer("UI");
+            RectTransform lookDragRegionRect = EnsureRectTransform(lookDragRegionObject);
+            lookDragRegionRect.anchorMin = new Vector2(0.5f, 0f);
+            lookDragRegionRect.anchorMax = new Vector2(1f, 1f);
+            lookDragRegionRect.pivot = new Vector2(0.5f, 0.5f);
+            lookDragRegionRect.anchoredPosition = Vector2.zero;
+            lookDragRegionRect.sizeDelta = Vector2.zero;
+            lookDragRegionRect.localScale = Vector3.one;
+
+            Image lookDragRegionImage = lookDragRegionObject.GetComponent<Image>();
+            if (lookDragRegionImage == null)
+            {
+                lookDragRegionImage = lookDragRegionObject.AddComponent<Image>();
+            }
+            lookDragRegionImage.color = new Color(1f, 1f, 1f, 0f);
+            lookDragRegionImage.raycastTarget = true;
+
+            if (lookDragRegionObject.GetComponent<CanvasRenderer>() == null)
+            {
+                lookDragRegionObject.AddComponent<CanvasRenderer>();
+            }
+
+            lookDragRegion = lookDragRegionObject.GetComponent<TouchLookDragRegion>();
+            if (lookDragRegion == null)
+            {
+                lookDragRegion = lookDragRegionObject.AddComponent<TouchLookDragRegion>();
+            }
 
             GameObject joystickRootObject = FindOrCreateChild(canvasObject.transform, JoystickRootName);
             joystickRootObject.layer = LayerMask.NameToLayer("UI");
