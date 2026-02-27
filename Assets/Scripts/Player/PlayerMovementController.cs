@@ -20,7 +20,7 @@ public sealed class PlayerMovementController : MonoBehaviour
     [SerializeField] private string moveActionName = "Move";
 
     [Header("Movement")]
-    [SerializeField] private float visualYawOffset = 90f;
+    [SerializeField] private float visualYawOffset = 0f;
     [SerializeField] private float maxSpeed = 6.75f;
     [SerializeField] private float acceleration = 26f;
     [SerializeField] private float deceleration = 34f;
@@ -32,6 +32,8 @@ public sealed class PlayerMovementController : MonoBehaviour
     private CharacterController _characterController;
     private Vector3 _planarVelocity;
     private float _verticalVelocity;
+    private Vector2 _currentInput;
+    private Vector3 _currentDesiredMove;
     private bool _warnedMissingCamera;
     private bool _warnedMissingInput;
     private bool _warnedMissingMoveAction;
@@ -39,6 +41,17 @@ public sealed class PlayerMovementController : MonoBehaviour
 #if ENABLE_INPUT_SYSTEM
     private InputAction _moveAction;
 #endif
+
+    public Vector2 CurrentInput => _currentInput;
+    public Vector3 CurrentDesiredMove => _currentDesiredMove;
+    public Vector3 CurrentPlanarVelocity => _planarVelocity;
+    public float CurrentVerticalVelocity => _verticalVelocity;
+    public float VisualYawOffset => visualYawOffset;
+
+    public void SetVisualYawOffset(float yawDegrees)
+    {
+        visualYawOffset = yawDegrees;
+    }
 
     public void SetDependencies(VirtualJoystick joystickReference, Transform cameraReference, Transform visualReference)
     {
@@ -153,6 +166,8 @@ public sealed class PlayerMovementController : MonoBehaviour
 
         Vector2 input = ReadInput();
         Vector3 desiredMove = ResolveMoveDirection(input);
+        _currentInput = input;
+        _currentDesiredMove = desiredMove;
         Vector3 desiredPlanarVelocity = desiredMove * maxSpeed;
 
         float speedChangeRate = desiredPlanarVelocity.sqrMagnitude > 0.0001f

@@ -19,6 +19,9 @@ namespace Kensei.Editor
         private const string JoystickHandleName = "JoystickHandle";
         private const string LookDragRegionName = "LookDragRegion";
         private const string InputActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
+        private const string SyntyAnimatorControllerAssetPath =
+            "Assets/Synty/AnimationBaseLocomotion/Animations/Polygon/AC_Polygon_Masculine.controller";
+        private const string SyntyCharactersModelAssetPath = "Assets/Synty/PolygonSamuraiEmpire/Models/Characters.fbx";
         private const string PlayerActionMapName = "Player";
         private const string MoveActionName = "Move";
 
@@ -94,6 +97,15 @@ namespace Kensei.Editor
                 inputActions,
                 PlayerActionMapName,
                 MoveActionName);
+            movement.SetVisualYawOffset(0f);
+
+            Animator animator = EnsureAnimator(visualRoot);
+            SyntyLocomotionAnimatorDriver animatorDriver = EnsureAnimatorDriver(
+                player,
+                animator,
+                characterController,
+                visualRoot,
+                movement);
 
             GameCameraController cameraController = cameraTransform != null
                 ? cameraTransform.GetComponent<GameCameraController>()
@@ -107,6 +119,14 @@ namespace Kensei.Editor
             EditorUtility.SetDirty(player);
             EditorUtility.SetDirty(movement);
             EditorUtility.SetDirty(joystick);
+            if (animator != null)
+            {
+                EditorUtility.SetDirty(animator);
+            }
+            if (animatorDriver != null)
+            {
+                EditorUtility.SetDirty(animatorDriver);
+            }
             if (lookDragRegion != null)
             {
                 EditorUtility.SetDirty(lookDragRegion);
@@ -154,6 +174,81 @@ namespace Kensei.Editor
             }
 
             return playerTransform.childCount > 0 ? playerTransform.GetChild(0) : playerTransform;
+        }
+
+        private static Animator EnsureAnimator(Transform visualRoot)
+        {
+            if (visualRoot == null)
+            {
+                return null;
+            }
+
+            Animator animator = visualRoot.GetComponent<Animator>();
+            if (animator == null)
+            {
+                animator = visualRoot.gameObject.AddComponent<Animator>();
+            }
+
+            RuntimeAnimatorController controller =
+                AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(SyntyAnimatorControllerAssetPath);
+            if (controller == null)
+            {
+                Debug.LogWarning($"Could not load Synty animator controller at '{SyntyAnimatorControllerAssetPath}'.");
+            }
+            else
+            {
+                animator.runtimeAnimatorController = controller;
+            }
+
+            if (animator.avatar == null || !animator.avatar.isValid || !animator.avatar.isHuman)
+            {
+                Avatar humanoidAvatar = ResolveHumanoidAvatar();
+                if (humanoidAvatar != null)
+                {
+                    animator.avatar = humanoidAvatar;
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        $"Could not find a valid humanoid Avatar in '{SyntyCharactersModelAssetPath}'. " +
+                        "Assign an Avatar manually on the player Animator if animations do not retarget.");
+                }
+            }
+
+            animator.applyRootMotion = false;
+            animator.enabled = true;
+            return animator;
+        }
+
+        private static Avatar ResolveHumanoidAvatar()
+        {
+            Object[] assets = AssetDatabase.LoadAllAssetsAtPath(SyntyCharactersModelAssetPath);
+            for (int index = 0; index < assets.Length; index++)
+            {
+                if (assets[index] is Avatar avatar && avatar.isValid && avatar.isHuman)
+                {
+                    return avatar;
+                }
+            }
+
+            return null;
+        }
+
+        private static SyntyLocomotionAnimatorDriver EnsureAnimatorDriver(
+            GameObject player,
+            Animator animator,
+            CharacterController characterController,
+            Transform visualRoot,
+            PlayerMovementController movement)
+        {
+            SyntyLocomotionAnimatorDriver driver = player.GetComponent<SyntyLocomotionAnimatorDriver>();
+            if (driver == null)
+            {
+                driver = player.AddComponent<SyntyLocomotionAnimatorDriver>();
+            }
+
+            driver.SetDependencies(animator, characterController, visualRoot, movement);
+            return driver;
         }
 
         private static void EnsureEventSystem()
