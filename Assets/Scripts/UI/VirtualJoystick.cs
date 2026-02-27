@@ -27,6 +27,8 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
     private PointerSource _pointerSource;
     private bool _warnedMissingReferences;
     private bool _warnedInvalidInputRegion;
+    private bool _mouseFallbackWasPressed;
+    private bool _attemptedMouseReenable;
 
     private enum PointerSource
     {
@@ -208,21 +210,43 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
                 ClearPointerSource(PointerSource.MouseFallback);
             }
 
+            _mouseFallbackWasPressed = false;
             return;
         }
 
+        if (!mouse.enabled)
+        {
+#if UNITY_EDITOR
+            if (!_attemptedMouseReenable)
+            {
+                InputSystem.EnableDevice(mouse);
+                _attemptedMouseReenable = true;
+            }
+#endif
+
+            _mouseFallbackWasPressed = false;
+            return;
+        }
+
+        _attemptedMouseReenable = false;
+
+        bool leftPressed = mouse.leftButton.isPressed;
+        bool pressedThisFrame = mouse.leftButton.wasPressedThisFrame || (leftPressed && !_mouseFallbackWasPressed);
+
         if (!allowMouseFallback || !Application.isPlaying)
         {
-            if (_pointerSource == PointerSource.MouseFallback && !mouse.leftButton.isPressed)
+            if (_pointerSource == PointerSource.MouseFallback && !leftPressed)
             {
                 ClearPointerSource(PointerSource.MouseFallback);
             }
 
+            _mouseFallbackWasPressed = leftPressed;
             return;
         }
 
         if (_pointerSource == PointerSource.UIEvent && !ShouldYieldUiSourceToMouse(mouse))
         {
+            _mouseFallbackWasPressed = leftPressed;
             return;
         }
 
@@ -245,32 +269,38 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
 
         if (_pointerSource != PointerSource.MouseFallback)
         {
-            if (!mouse.leftButton.wasPressedThisFrame)
+            if (!pressedThisFrame)
             {
+                _mouseFallbackWasPressed = leftPressed;
                 return;
             }
 
             if (!RectTransformUtility.RectangleContainsScreenPoint(region, mousePosition, regionCamera))
             {
+                _mouseFallbackWasPressed = leftPressed;
                 return;
             }
 
             _pointerSource = PointerSource.MouseFallback;
             _activePointerId = int.MinValue;
             ApplyScreenPosition(mousePosition, regionCamera);
+            _mouseFallbackWasPressed = leftPressed;
             return;
         }
 
-        if (mouse.leftButton.isPressed)
+        if (leftPressed)
         {
             ApplyScreenPosition(mousePosition, regionCamera);
+            _mouseFallbackWasPressed = leftPressed;
             return;
         }
 
-        if (mouse.leftButton.wasReleasedThisFrame || !mouse.leftButton.isPressed)
+        if (mouse.leftButton.wasReleasedThisFrame || !leftPressed)
         {
             ClearPointerSource(PointerSource.MouseFallback);
         }
+
+        _mouseFallbackWasPressed = leftPressed;
     }
 #endif
 
@@ -338,22 +368,18 @@ public sealed class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragH
     private bool ShouldIgnoreUiPointer(PointerEventData eventData)
     {
 #if (UNITY_EDITOR || UNITY_STANDALONE) && ENABLE_INPUT_SYSTEM
-        if (!allowMouseFallback || eventData == null)
+        if (eventData == null)
         {
             return false;
         }
 
-        if (IsMousePointer(eventData.pointerId))
+        // Preserve active fallback drag ownership and avoid duplicate handling from UI callbacks.
+        if (_pointerSource == PointerSource.MouseFallback && IsMousePointer(eventData.pointerId))
         {
             return true;
         }
 
-        if (HasAnyActiveTouches())
-        {
-            return false;
-        }
-
-        return Mouse.current != null && eventData.button == PointerEventData.InputButton.Left;
+        return false;
 #else
         return false;
 #endif

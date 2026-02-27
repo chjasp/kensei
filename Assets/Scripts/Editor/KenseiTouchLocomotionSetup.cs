@@ -136,9 +136,27 @@ namespace Kensei.Editor
                 eventSystem = eventSystemObject.GetComponent<EventSystem>();
             }
 
-            if (eventSystem.GetComponent<InputSystemUIInputModule>() == null)
+            InputSystemUIInputModule[] uiModules = eventSystem.GetComponents<InputSystemUIInputModule>();
+            InputSystemUIInputModule inputSystemUiInputModule;
+            if (uiModules.Length == 0)
             {
-                eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+                inputSystemUiInputModule = eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+            }
+            else
+            {
+                inputSystemUiInputModule = uiModules[0];
+                for (int index = 1; index < uiModules.Length; index++)
+                {
+                    Object.DestroyImmediate(uiModules[index]);
+                }
+            }
+
+            if (NeedsDefaultUiActions(inputSystemUiInputModule))
+            {
+                inputSystemUiInputModule.AssignDefaultActions();
+                inputSystemUiInputModule.enabled = false;
+                inputSystemUiInputModule.enabled = true;
+                EditorUtility.SetDirty(inputSystemUiInputModule);
             }
 
             StandaloneInputModule standaloneInputModule = eventSystem.GetComponent<StandaloneInputModule>();
@@ -146,6 +164,25 @@ namespace Kensei.Editor
             {
                 Object.DestroyImmediate(standaloneInputModule);
             }
+        }
+
+        private static bool NeedsDefaultUiActions(InputSystemUIInputModule inputSystemUiInputModule)
+        {
+            if (inputSystemUiInputModule == null || inputSystemUiInputModule.actionsAsset == null)
+            {
+                return true;
+            }
+
+            return inputSystemUiInputModule.point == null ||
+                   inputSystemUiInputModule.point.action == null ||
+                   inputSystemUiInputModule.leftClick == null ||
+                   inputSystemUiInputModule.leftClick.action == null ||
+                   inputSystemUiInputModule.move == null ||
+                   inputSystemUiInputModule.move.action == null ||
+                   inputSystemUiInputModule.submit == null ||
+                   inputSystemUiInputModule.submit.action == null ||
+                   inputSystemUiInputModule.cancel == null ||
+                   inputSystemUiInputModule.cancel.action == null;
         }
 
         private static VirtualJoystick EnsureTouchHud()
