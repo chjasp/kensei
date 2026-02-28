@@ -13,9 +13,9 @@ TagManager:
   - UI
   - 
   - 
-  - 
-  - 
-  - 
+  - PlayerHurtBox
+  - EnemyHurtBox
+  - Weapon
   - 
   - 
   - 
