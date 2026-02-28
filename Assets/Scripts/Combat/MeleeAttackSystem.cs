@@ -50,6 +50,8 @@ public sealed class MeleeAttackSystem : MonoBehaviour
     private bool _didAnimationEnd;
     private bool _isDamageWindowActive;
     private bool _warnedMissingSetup;
+    private bool _warnedInvalidAnimatorSetup;
+    private RuntimeAnimatorController _lastAnimatorController;
 
     private int _combatLayerIndex = -1;
     private float _targetCombatLayerWeight;
@@ -117,6 +119,13 @@ public sealed class MeleeAttackSystem : MonoBehaviour
             return;
         }
 
+        if (!EnsureAnimatorCombatSetup(logWarning: true))
+        {
+            // Fail safe: never enter or remain in an attacking lock when animator setup is invalid.
+            ResetComboToIdle(emitLog: false, invokeEvent: true);
+            return;
+        }
+
         if (_isAttackStepActive && !_isComboWindowOpen)
         {
             inputBuffered = true;
@@ -151,7 +160,7 @@ public sealed class MeleeAttackSystem : MonoBehaviour
     {
         ResolveCombatLayerIndex();
         _targetCombatLayerWeight = 0f;
-        if (animator != null)
+        if (EnsureAnimatorCombatSetup(logWarning: true))
         {
             animator.SetBool(InCombatHash, false);
             animator.SetInteger(ComboStepHash, 0);
@@ -166,6 +175,13 @@ public sealed class MeleeAttackSystem : MonoBehaviour
     private void Update()
     {
         ResolveReferences();
+
+        if (_isAttackStepActive && !EnsureAnimatorCombatSetup(logWarning: true))
+        {
+            ResetComboToIdle(emitLog: false, invokeEvent: true);
+            return;
+        }
+
         UpdateCombatLayerWeight();
 
         if (comboWindowTimer > 0f)
@@ -253,6 +269,108 @@ public sealed class MeleeAttackSystem : MonoBehaviour
         _combatLayerIndex = animator.GetLayerIndex(CombatLayerName);
     }
 
+    private bool EnsureAnimatorCombatSetup(bool logWarning)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+
+        RuntimeAnimatorController controller = animator.runtimeAnimatorController;
+        if (!ReferenceEquals(_lastAnimatorController, controller))
+        {
+            _lastAnimatorController = controller;
+            _warnedInvalidAnimatorSetup = false;
+        }
+
+        ResolveCombatLayerIndex();
+
+        bool hasCombatLayer = _combatLayerIndex >= 0;
+        bool hasAttackTrigger = HasAnimatorParameter(AttackTriggerHash, AnimatorControllerParameterType.Trigger);
+        bool hasComboStep = HasAnimatorParameter(ComboStepHash, AnimatorControllerParameterType.Int);
+        bool hasInCombat = HasAnimatorParameter(InCombatHash, AnimatorControllerParameterType.Bool);
+
+        if (hasCombatLayer && hasAttackTrigger && hasComboStep && hasInCombat)
+        {
+            return true;
+        }
+
+        if (logWarning && !_warnedInvalidAnimatorSetup)
+        {
+            System.Text.StringBuilder missing = new System.Text.StringBuilder(96);
+            if (!hasCombatLayer)
+            {
+                missing.Append("layer '").Append(CombatLayerName).Append("', ");
+            }
+
+            if (!hasAttackTrigger)
+            {
+                missing.Append("trigger '").Append(AttackTriggerParameter).Append("', ");
+            }
+
+            if (!hasComboStep)
+            {
+                missing.Append("int '").Append(ComboStepParameter).Append("', ");
+            }
+
+            if (!hasInCombat)
+            {
+                missing.Append("bool '").Append(InCombatParameter).Append("', ");
+            }
+
+            if (missing.Length >= 2)
+            {
+                missing.Length -= 2;
+            }
+
+            Debug.LogWarning(
+                $"MeleeAttackSystem animator setup is invalid on controller '{DescribeController(controller)}'. Missing: {missing}. " +
+                "Combat attacks are disabled until the animator controller is fixed.",
+                this);
+            _warnedInvalidAnimatorSetup = true;
+        }
+
+        return false;
+    }
+
+    private bool HasAnimatorParameter(int nameHash, AnimatorControllerParameterType expectedType)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = animator.parameters;
+        for (int index = 0; index < parameters.Length; index++)
+        {
+            AnimatorControllerParameter parameter = parameters[index];
+            if (parameter.nameHash == nameHash && parameter.type == expectedType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string DescribeController(RuntimeAnimatorController controller)
+    {
+        if (controller == null)
+        {
+            return "<none>";
+        }
+
+#if UNITY_EDITOR
+        string path = UnityEditor.AssetDatabase.GetAssetPath(controller);
+        if (!string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+#endif
+
+        return controller.name;
+    }
+
     private bool CanHandleAttackRequest()
     {
         if (combatController == null || animator == null || hitBox == null)
@@ -292,6 +410,12 @@ public sealed class MeleeAttackSystem : MonoBehaviour
 
     private void StartNextAttackStep()
     {
+        if (!EnsureAnimatorCombatSetup(logWarning: true))
+        {
+            ResetComboToIdle(emitLog: false, invokeEvent: true);
+            return;
+        }
+
         int maxSteps = comboTimings != null && comboTimings.Length > 0 ? comboTimings.Length : 3;
         int nextStep = currentComboStep <= 0 ? 1 : currentComboStep + 1;
         if (nextStep > maxSteps)
@@ -483,8 +607,11 @@ public sealed class MeleeAttackSystem : MonoBehaviour
 
         if (animator != null)
         {
-            animator.SetInteger(ComboStepHash, 0);
-            animator.SetBool(InCombatHash, false);
+            if (EnsureAnimatorCombatSetup(logWarning: false))
+            {
+                animator.SetInteger(ComboStepHash, 0);
+                animator.SetBool(InCombatHash, false);
+            }
         }
 
         if (combatController != null && combatController.CurrentState != CombatState.Dead)

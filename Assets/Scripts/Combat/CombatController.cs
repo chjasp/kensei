@@ -82,6 +82,16 @@ public sealed class CombatController : MonoBehaviour
         SetState(CombatState.Idle);
     }
 
+    public void RequestParry()
+    {
+        if (_currentState == CombatState.Dead)
+        {
+            return;
+        }
+
+        Debug.Log("Parry requested - not yet implemented", this);
+    }
+
     public void SetState(CombatState newState)
     {
         if (_currentState == newState)

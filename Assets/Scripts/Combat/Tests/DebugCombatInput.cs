@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -41,7 +42,7 @@ public sealed class DebugCombatInput : MonoBehaviour
     {
 #if ENABLE_INPUT_SYSTEM
         Mouse mouse = Mouse.current;
-        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame && !IsPointerOverUi())
         {
             return true;
         }
@@ -49,8 +50,20 @@ public sealed class DebugCombatInput : MonoBehaviour
         Keyboard keyboard = Keyboard.current;
         return keyboard != null && keyboard.spaceKey.wasPressedThisFrame;
 #else
-        return Input.GetMouseButtonDown(0) || Input.GetKeyDown(KeyCode.Space);
+        return (Input.GetMouseButtonDown(0) && !IsPointerOverUi()) || Input.GetKeyDown(KeyCode.Space);
 #endif
+    }
+
+    private static bool IsPointerOverUi()
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null)
+        {
+            return false;
+        }
+
+        return eventSystem.IsPointerOverGameObject()
+               || eventSystem.IsPointerOverGameObject(PointerInputModule.kMouseLeftId);
     }
 
     private void ResolveReferences()

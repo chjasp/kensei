@@ -17,7 +17,13 @@ namespace Kensei.Editor
         private const string WeaponDataRootFolder = "Assets/Data";
         private const string WeaponDataFolder = "Assets/Data/Weapons";
         private const string WeaponAssetPath = "Assets/Data/Weapons/Katana.asset";
+        private const string WeaponPrefabPath = "Assets/Synty/PolygonSamuraiEmpire/Prefabs/Weapons/SM_Wep_Sword_01.prefab";
+        private const string CombatAnimatorControllerAssetPath = "Assets/Animation/Controllers/AC_Polygon_Masculine_Combat.controller";
+        private const string BaseAnimatorControllerAssetPath =
+            "Assets/Synty/AnimationBaseLocomotion/Animations/Polygon/AC_Polygon_Masculine.controller";
         private const string PlayerVisualRootName = "SM_Chr_Samurai_Male_01";
+        private static readonly Vector3 WeaponPositionOffset = Vector3.zero;
+        private static readonly Vector3 WeaponRotationOffset = Vector3.zero;
 
         private static readonly string[] RightHandCandidates =
         {
@@ -67,6 +73,11 @@ namespace Kensei.Editor
 
             ConfigureCollisionMatrix(playerLayer, enemyLayer, weaponLayer);
             WeaponData katana = EnsureKatanaAsset();
+            GameObject weaponPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(WeaponPrefabPath);
+            if (weaponPrefab == null)
+            {
+                throw new InvalidOperationException($"Could not load weapon prefab at '{WeaponPrefabPath}'.");
+            }
 
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             if (!scene.IsValid())
@@ -84,11 +95,15 @@ namespace Kensei.Editor
             CombatController combatController = GetOrAddComponent<CombatController>(player);
             PlayerMovementController movementController = player.GetComponent<PlayerMovementController>();
             Animator animator = player.GetComponentInChildren<Animator>(includeInactive: true);
+            EnsureCombatAnimatorController(animator);
+            Transform rightHandBone = ResolveRightHandTransform(player.transform);
+            WeaponMount weaponMount = EnsureWeaponMount(player, rightHandBone, weaponPrefab);
+            Transform weaponTransform = weaponMount != null ? weaponMount.EnsureWeaponMounted() : null;
 
             HurtBox hurtBox = EnsurePlayerHurtBox(player.transform, playerLayer);
             hurtBox.SetHealthSystem(healthSystem);
 
-            HitBox hitBox = EnsureWeaponHitBox(player.transform, weaponLayer);
+            HitBox hitBox = EnsureWeaponHitBox(player.transform, weaponTransform, weaponLayer);
             hitBox.SetSourceRoot(player.transform);
             hitBox.SetTargetLayers(LayerMask.GetMask(EnemyLayerName));
             hitBox.SetWeaponData(katana);
@@ -106,6 +121,14 @@ namespace Kensei.Editor
             EditorUtility.SetDirty(hurtBox);
             EditorUtility.SetDirty(hitBox);
             EditorUtility.SetDirty(foundationTest);
+            if (weaponMount != null)
+            {
+                EditorUtility.SetDirty(weaponMount);
+            }
+            if (weaponTransform != null)
+            {
+                EditorUtility.SetDirty(weaponTransform.gameObject);
+            }
             if (katana != null)
             {
                 EditorUtility.SetDirty(katana);
@@ -116,6 +139,40 @@ namespace Kensei.Editor
             AssetDatabase.SaveAssets();
 
             Debug.Log("Kensei combat foundation setup completed.");
+        }
+
+        private static void EnsureCombatAnimatorController(Animator animator)
+        {
+            if (animator == null)
+            {
+                Debug.LogWarning("Could not resolve player Animator for combat setup.");
+                return;
+            }
+
+            RuntimeAnimatorController combatController =
+                AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(CombatAnimatorControllerAssetPath);
+            RuntimeAnimatorController fallbackController =
+                AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(BaseAnimatorControllerAssetPath);
+
+            RuntimeAnimatorController targetController = combatController != null ? combatController : fallbackController;
+            if (targetController == null)
+            {
+                Debug.LogWarning(
+                    $"Could not load animator controllers at '{CombatAnimatorControllerAssetPath}' or '{BaseAnimatorControllerAssetPath}'.");
+                return;
+            }
+
+            if (!ReferenceEquals(animator.runtimeAnimatorController, targetController))
+            {
+                animator.runtimeAnimatorController = targetController;
+            }
+
+            if (combatController == null)
+            {
+                Debug.LogWarning(
+                    $"Combat animator controller missing at '{CombatAnimatorControllerAssetPath}'. " +
+                    $"Falling back to '{BaseAnimatorControllerAssetPath}'.");
+            }
         }
 
         private static int EnsureLayer(string layerName)
@@ -242,9 +299,31 @@ namespace Kensei.Editor
             return GetOrAddComponent<HurtBox>(hurtBoxGameObject);
         }
 
-        private static HitBox EnsureWeaponHitBox(Transform playerRoot, int weaponLayer)
+        private static WeaponMount EnsureWeaponMount(GameObject player, Transform handBone, GameObject weaponPrefab)
         {
-            Transform parent = ResolveRightHandTransform(playerRoot);
+            WeaponMount weaponMount = GetOrAddComponent<WeaponMount>(player);
+            weaponMount.SetMountConfiguration(handBone, weaponPrefab, WeaponPositionOffset, WeaponRotationOffset);
+            Transform weaponTransform = weaponMount.EnsureWeaponMounted();
+            if (weaponTransform == null && handBone != null && weaponPrefab != null)
+            {
+                GameObject weaponObject = PrefabUtility.InstantiatePrefab(weaponPrefab, handBone) as GameObject;
+                if (weaponObject == null)
+                {
+                    weaponObject = UnityEngine.Object.Instantiate(weaponPrefab, handBone, false);
+                }
+
+                weaponObject.name = weaponPrefab.name;
+                weaponTransform = weaponObject.transform;
+                weaponTransform.localPosition = WeaponPositionOffset;
+                weaponTransform.localRotation = Quaternion.Euler(WeaponRotationOffset);
+            }
+
+            return weaponMount;
+        }
+
+        private static HitBox EnsureWeaponHitBox(Transform playerRoot, Transform weaponTransform, int weaponLayer)
+        {
+            Transform parent = weaponTransform != null ? weaponTransform : ResolveRightHandTransform(playerRoot);
             if (parent == null)
             {
                 parent = ResolveVisualRoot(playerRoot);
@@ -255,11 +334,15 @@ namespace Kensei.Editor
                 parent = playerRoot;
             }
 
-            Transform hitBoxTransform = parent.Find(WeaponHitBoxObjectName);
+            Transform hitBoxTransform = FindChildByName(playerRoot, WeaponHitBoxObjectName);
             if (hitBoxTransform == null)
             {
                 GameObject hitBoxObject = new GameObject(WeaponHitBoxObjectName);
                 hitBoxTransform = hitBoxObject.transform;
+                hitBoxTransform.SetParent(parent, worldPositionStays: false);
+            }
+            else if (hitBoxTransform.parent != parent)
+            {
                 hitBoxTransform.SetParent(parent, worldPositionStays: false);
             }
 
@@ -351,6 +434,31 @@ namespace Kensei.Editor
             }
 
             return new string(buffer, 0, bufferCount);
+        }
+
+        private static Transform FindChildByName(Transform root, string childName)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            if (root.name == childName)
+            {
+                return root;
+            }
+
+            int childCount = root.childCount;
+            for (int index = 0; index < childCount; index++)
+            {
+                Transform match = FindChildByName(root.GetChild(index), childName);
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+
+            return null;
         }
 
         private static T GetOrAddComponent<T>(GameObject targetObject) where T : Component
