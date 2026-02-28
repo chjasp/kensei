@@ -122,6 +122,15 @@ $RECYCLE.BIN/
 .nfs*
 
 # =============== #
+#   Local PDF     #
+# =============== #
+
+.venv_pdf/
+output/pdf/
+tmp/pdf/
+tmp/pdfs/
+
+# =============== #
 #  Plastic SCM    #
 # =============== #
 
