@@ -559,7 +559,8 @@ PrefabInstance:
         already bound by a Humanoid avatar. These transforms can only be changed
         by Humanoid clips.\n\tTransform 'Toes_L'\n\tTransform 'Toes_R'\n\tTransform
         'Toes_L'\n\tTransform 'Toes_R'\n\tFrom animation clip 'A_Attack_LightCombo01A_Sword'\n\tFrom
-        animation clip 'A_Attack_LightCombo01B_Sword'\n\tFrom animation clip 'A_Attack_LightCombo01C_Sword'"
+        animation clip 'A_Attack_LightCombo01B_Sword'\n\tFrom animation clip 'A_Attack_LightCombo01C_Sword'\n\tFrom
+        animation clip 'A_Parry_F_Sword'"
       objectReference: {fileID: 0}
     - target: {fileID: 5019589543755250820, guid: 766bd15567b5ec84aad59e5952d47b54, type: 3}
       propertyPath: m_ApplyRootMotion
@@ -2476,6 +2477,13 @@ MonoBehaviour:
   movementController: {fileID: 712931335}
   animator: {fileID: 96578404}
   meleeAttackSystem: {fileID: 712931342}
+  audioSource: {fileID: 0}
+  parryWindowDuration: 0.4
+  parryRecoveryDuration: 0.25
+  parryCooldownDuration: 1
+  parryClangClip: {fileID: 0}
+  enableParryStagger: 1
+  parryStaggerDuration: 0.5
 --- !u!114 &712931340
 MonoBehaviour:
   m_ObjectHideFlags: 0

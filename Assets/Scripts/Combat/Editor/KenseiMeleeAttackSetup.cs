@@ -21,12 +21,16 @@ namespace Kensei.Editor
         private const string Attack01StateName = "Attack_01";
         private const string Attack02StateName = "Attack_02";
         private const string Attack03StateName = "Attack_03";
+        private const string ParryStateName = "Parry";
 
         private const string AttackTriggerParameter = "AttackTrigger";
+        private const string ParryTriggerParameter = "Parry";
+        private const string ParryHoldParameter = "ParryHeld";
         private const string ComboStepParameter = "ComboStep";
         private const string InCombatParameter = "InCombat";
 
         private const float KatanaComboResetTime = 0.7f;
+        private const float KatanaParryWindowDuration = 0.4f;
 
         private const string Attack01ClipAssetPath =
             "Assets/Synty/AnimationSwordCombat/Animations/Polygon/Attack/LightCombo01/A_Attack_LightCombo01A_Sword.fbx";
@@ -38,6 +42,15 @@ namespace Kensei.Editor
         private const string Attack01ClipName = "A_Attack_LightCombo01A_Sword";
         private const string Attack02ClipName = "A_Attack_LightCombo01B_Sword";
         private const string Attack03ClipName = "A_Attack_LightCombo01C_Sword";
+        private const string PreferredParryClipAssetPath =
+            "Assets/Synty/AnimationSwordCombat/Animations/Polygon/Block/A_Parry_F_Sword.fbx";
+        private const string PreferredParryClipName = "A_Parry_F_Sword";
+
+        private static readonly string[] ParryClipSearchFolders =
+        {
+            "Assets/Synty/AnimationSwordCombat/Animations/Polygon/Block",
+            "Assets/Synty/AnimationSwordCombat/Animations/Polygon"
+        };
 
         [MenuItem("Tools/Kensei/Apply Melee Attack Setup")]
         public static void ApplyFromMenu()
@@ -78,6 +91,7 @@ namespace Kensei.Editor
             }
 
             katana.comboResetTime = KatanaComboResetTime;
+            katana.parryWindowDuration = KatanaParryWindowDuration;
             EditorUtility.SetDirty(katana);
 
             Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
@@ -184,12 +198,15 @@ namespace Kensei.Editor
         private static void PatchCombatAnimatorController(AnimatorController controller)
         {
             EnsureParameter(controller, AttackTriggerParameter, AnimatorControllerParameterType.Trigger);
+            EnsureParameter(controller, ParryTriggerParameter, AnimatorControllerParameterType.Trigger);
+            EnsureParameter(controller, ParryHoldParameter, AnimatorControllerParameterType.Bool, defaultBool: false);
             EnsureParameter(controller, ComboStepParameter, AnimatorControllerParameterType.Int, defaultInt: 0);
             EnsureParameter(controller, InCombatParameter, AnimatorControllerParameterType.Bool, defaultBool: false);
 
             AnimationClip attack01Clip = LoadClipFromAsset(Attack01ClipAssetPath, Attack01ClipName);
             AnimationClip attack02Clip = LoadClipFromAsset(Attack02ClipAssetPath, Attack02ClipName);
             AnimationClip attack03Clip = LoadClipFromAsset(Attack03ClipAssetPath, Attack03ClipName);
+            AnimationClip parryClip = ResolveParryClip();
 
             int combatLayerIndex = EnsureCombatLayer(controller);
             AnimatorControllerLayer[] layers = controller.layers;
@@ -213,11 +230,13 @@ namespace Kensei.Editor
             AnimatorState attack01State = EnsureState(stateMachine, Attack01StateName, new Vector3(540f, 80f, 0f));
             AnimatorState attack02State = EnsureState(stateMachine, Attack02StateName, new Vector3(820f, 180f, 0f));
             AnimatorState attack03State = EnsureState(stateMachine, Attack03StateName, new Vector3(1100f, 280f, 0f));
+            AnimatorState parryState = EnsureState(stateMachine, ParryStateName, new Vector3(540f, 280f, 0f));
 
             emptyState.motion = null;
             attack01State.motion = attack01Clip;
             attack02State.motion = attack02Clip;
             attack03State.motion = attack03Clip;
+            parryState.motion = parryClip;
             stateMachine.defaultState = emptyState;
 
             HashSet<AnimatorState> managedStates = new HashSet<AnimatorState>
@@ -225,16 +244,21 @@ namespace Kensei.Editor
                 emptyState,
                 attack01State,
                 attack02State,
-                attack03State
+                attack03State,
+                parryState
             };
 
             RemoveManagedTransitions(emptyState, managedStates);
             RemoveManagedTransitions(attack01State, managedStates);
             RemoveManagedTransitions(attack02State, managedStates);
             RemoveManagedTransitions(attack03State, managedStates);
+            RemoveManagedTransitions(parryState, managedStates);
 
             AnimatorStateTransition emptyToAttack01 = emptyState.AddTransition(attack01State);
             ConfigureAttackTransition(emptyToAttack01, comboStep: 1);
+
+            AnimatorStateTransition emptyToParry = emptyState.AddTransition(parryState);
+            ConfigureParryTransition(emptyToParry);
 
             AnimatorStateTransition attack01ToAttack02 = attack01State.AddTransition(attack02State);
             ConfigureAttackTransition(attack01ToAttack02, comboStep: 2);
@@ -245,6 +269,7 @@ namespace Kensei.Editor
             ConfigureReturnToEmptyTransition(attack01State.AddTransition(emptyState));
             ConfigureReturnToEmptyTransition(attack02State.AddTransition(emptyState));
             ConfigureReturnToEmptyTransition(attack03State.AddTransition(emptyState));
+            ConfigureParryReturnTransition(parryState.AddTransition(emptyState));
 
             layers[combatLayerIndex] = combatLayer;
             controller.layers = layers;
@@ -366,6 +391,20 @@ namespace Kensei.Editor
             transition.AddCondition(AnimatorConditionMode.Equals, comboStep, ComboStepParameter);
         }
 
+        private static void ConfigureParryTransition(AnimatorStateTransition transition)
+        {
+            transition.hasExitTime = false;
+            transition.exitTime = 0f;
+            transition.duration = 0f;
+            transition.offset = 0f;
+            transition.hasFixedDuration = true;
+            transition.interruptionSource = TransitionInterruptionSource.None;
+            transition.orderedInterruption = true;
+            transition.canTransitionToSelf = false;
+            transition.AddCondition(AnimatorConditionMode.If, 0f, ParryTriggerParameter);
+            transition.AddCondition(AnimatorConditionMode.If, 0f, ParryHoldParameter);
+        }
+
         private static void ConfigureReturnToEmptyTransition(AnimatorStateTransition transition)
         {
             transition.hasExitTime = true;
@@ -376,6 +415,19 @@ namespace Kensei.Editor
             transition.interruptionSource = TransitionInterruptionSource.None;
             transition.orderedInterruption = true;
             transition.canTransitionToSelf = false;
+        }
+
+        private static void ConfigureParryReturnTransition(AnimatorStateTransition transition)
+        {
+            transition.hasExitTime = false;
+            transition.exitTime = 0f;
+            transition.duration = 0.05f;
+            transition.offset = 0f;
+            transition.hasFixedDuration = true;
+            transition.interruptionSource = TransitionInterruptionSource.None;
+            transition.orderedInterruption = true;
+            transition.canTransitionToSelf = false;
+            transition.AddCondition(AnimatorConditionMode.IfNot, 0f, ParryHoldParameter);
         }
 
         private static AnimationClip LoadClipFromAsset(string assetPath, string clipName)
@@ -391,6 +443,83 @@ namespace Kensei.Editor
 
             throw new InvalidOperationException(
                 $"Could not find clip '{clipName}' in asset '{assetPath}'.");
+        }
+
+        private static AnimationClip ResolveParryClip()
+        {
+            AnimationClip preferred = TryLoadClipFromAsset(PreferredParryClipAssetPath, PreferredParryClipName);
+            if (preferred != null)
+            {
+                return preferred;
+            }
+
+            AnimationClip fallback = FindClipByKeyword("parry");
+            if (fallback == null)
+            {
+                fallback = FindClipByKeyword("block");
+            }
+
+            if (fallback == null)
+            {
+                fallback = FindClipByKeyword("defend");
+            }
+
+            if (fallback != null)
+            {
+                Debug.Log($"Resolved fallback parry clip: '{fallback.name}'.");
+                return fallback;
+            }
+
+            throw new InvalidOperationException(
+                "Could not resolve parry animation. Expected a clip containing 'parry', 'block', or 'defend'.");
+        }
+
+        private static AnimationClip FindClipByKeyword(string keyword)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                return null;
+            }
+
+            string[] clipGuids = AssetDatabase.FindAssets($"t:AnimationClip {keyword}", ParryClipSearchFolders);
+            for (int guidIndex = 0; guidIndex < clipGuids.Length; guidIndex++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(clipGuids[guidIndex]);
+                UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(path);
+                for (int assetIndex = 0; assetIndex < assets.Length; assetIndex++)
+                {
+                    if (!(assets[assetIndex] is AnimationClip clip))
+                    {
+                        continue;
+                    }
+
+                    if (clip.name.StartsWith("__preview__", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (clip.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return clip;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static AnimationClip TryLoadClipFromAsset(string assetPath, string clipName)
+        {
+            UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            for (int index = 0; index < assets.Length; index++)
+            {
+                if (assets[index] is AnimationClip clip && string.Equals(clip.name, clipName, StringComparison.Ordinal))
+                {
+                    return clip;
+                }
+            }
+
+            return null;
         }
 
         private static void EnsureFolder(string path)

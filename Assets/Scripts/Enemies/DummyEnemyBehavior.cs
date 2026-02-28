@@ -27,13 +27,33 @@ public sealed class DummyEnemyBehavior : MonoBehaviour
     private float _maxHealth;
     private float _hitFlashTimer;
     private float _deathDisableTimer = -1f;
+    private float _parryStaggerTimer;
+    private float _cachedAnimatorSpeed = 1f;
     private bool _flashApplied;
     private bool _hasHitReactTrigger;
     private bool _hasDeathTrigger;
     private bool _isDead;
+    private bool _isParryStaggerActive;
 
     private readonly int _baseColorPropertyId = Shader.PropertyToID(BaseColorPropertyName);
     private readonly int _colorPropertyId = Shader.PropertyToID(ColorPropertyName);
+
+    public void ApplyParryStagger(float duration)
+    {
+        if (duration <= 0f || animator == null || !isActiveAndEnabled)
+        {
+            return;
+        }
+
+        if (!_isParryStaggerActive)
+        {
+            _cachedAnimatorSpeed = animator.speed;
+            _isParryStaggerActive = true;
+        }
+
+        _parryStaggerTimer = Mathf.Max(_parryStaggerTimer, duration);
+        animator.speed = 0f;
+    }
 
     public void SetReferences(
         HealthSystem healthSystemReference,
@@ -80,11 +100,14 @@ public sealed class DummyEnemyBehavior : MonoBehaviour
         RestoreFlashColors();
         _hitFlashTimer = 0f;
         _deathDisableTimer = -1f;
+        ClearParryStagger(restoreAnimatorSpeed: true);
         _isDead = false;
     }
 
     private void Update()
     {
+        UpdateParryStagger();
+
         if (_hitFlashTimer > 0f)
         {
             if (!_flashApplied)
@@ -146,6 +169,7 @@ public sealed class DummyEnemyBehavior : MonoBehaviour
 
         _isDead = true;
         Debug.Log("Enemy died", this);
+        ClearParryStagger(restoreAnimatorSpeed: true);
 
         if (animator != null && _hasDeathTrigger && deathDisableDelay > 0f)
         {
@@ -266,6 +290,38 @@ public sealed class DummyEnemyBehavior : MonoBehaviour
     {
         _hasHitReactTrigger = HasTriggerParameter(animator, hitReactTriggerName);
         _hasDeathTrigger = HasTriggerParameter(animator, deathTriggerName);
+    }
+
+    private void UpdateParryStagger()
+    {
+        if (!_isParryStaggerActive)
+        {
+            return;
+        }
+
+        _parryStaggerTimer = Mathf.Max(0f, _parryStaggerTimer - Time.deltaTime);
+        if (_parryStaggerTimer > 0f)
+        {
+            if (animator != null && animator.speed != 0f)
+            {
+                animator.speed = 0f;
+            }
+
+            return;
+        }
+
+        ClearParryStagger(restoreAnimatorSpeed: true);
+    }
+
+    private void ClearParryStagger(bool restoreAnimatorSpeed)
+    {
+        if (_isParryStaggerActive && restoreAnimatorSpeed && animator != null)
+        {
+            animator.speed = _cachedAnimatorSpeed;
+        }
+
+        _isParryStaggerActive = false;
+        _parryStaggerTimer = 0f;
     }
 
     private void CacheRenderersAndColors()

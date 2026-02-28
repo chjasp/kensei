@@ -257,7 +257,7 @@ namespace Kensei.Editor
             katana.baseDamage = 20f;
             katana.attackRange = 2.2f;
             katana.comboResetTime = 0.8f;
-            katana.parryWindowDuration = 0.2f;
+            katana.parryWindowDuration = 0.4f;
             katana.damageType = DamageType.LightMelee;
 
             AssetDatabase.CreateAsset(katana, WeaponAssetPath);

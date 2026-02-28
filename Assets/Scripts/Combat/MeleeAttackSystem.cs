@@ -572,10 +572,16 @@ public sealed class MeleeAttackSystem : MonoBehaviour
             return;
         }
 
+        float desiredWeight = _targetCombatLayerWeight;
+        if (combatController != null && combatController.CurrentState == CombatState.Parrying)
+        {
+            desiredWeight = 1f;
+        }
+
         float currentWeight = animator.GetLayerWeight(_combatLayerIndex);
         float nextWeight = Mathf.MoveTowards(
             currentWeight,
-            _targetCombatLayerWeight,
+            desiredWeight,
             combatLayerBlendSpeed * Time.deltaTime);
 
         animator.SetLayerWeight(_combatLayerIndex, nextWeight);

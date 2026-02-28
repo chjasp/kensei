@@ -7,6 +7,6 @@ public sealed class WeaponData : ScriptableObject
     public float baseDamage = 20f;
     public float attackRange = 2f;
     public float comboResetTime = 0.8f;
-    public float parryWindowDuration = 0.2f;
+    public float parryWindowDuration = 0.4f;
     public DamageType damageType = DamageType.LightMelee;
 }

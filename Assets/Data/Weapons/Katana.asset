@@ -16,5 +16,5 @@ MonoBehaviour:
   baseDamage: 20
   attackRange: 2.2
   comboResetTime: 0.7
-  parryWindowDuration: 0.2
+  parryWindowDuration: 0.4
   damageType: 0

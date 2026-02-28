@@ -54,6 +54,12 @@ public sealed class CombatTouchHUD : MonoBehaviour
         combatController?.RequestParry();
     }
 
+    public void HandleParryPointerUp()
+    {
+        ResolveReferences();
+        combatController?.ReleaseParry();
+    }
+
     private void Awake()
     {
         ResolveReferences();
@@ -68,6 +74,7 @@ public sealed class CombatTouchHUD : MonoBehaviour
 
     private void OnDisable()
     {
+        combatController?.ReleaseParry();
         Unsubscribe();
     }
 
@@ -126,6 +133,7 @@ public sealed class CombatTouchHUD : MonoBehaviour
         if (parryButton != null)
         {
             parryButton.OnPointerDownEvent += HandleParryPointerDown;
+            parryButton.OnPointerUpEvent += HandleParryPointerUp;
             subscribedAny = true;
         }
 
@@ -147,6 +155,7 @@ public sealed class CombatTouchHUD : MonoBehaviour
         if (parryButton != null)
         {
             parryButton.OnPointerDownEvent -= HandleParryPointerDown;
+            parryButton.OnPointerUpEvent -= HandleParryPointerUp;
         }
 
         _isSubscribed = false;
@@ -154,9 +163,10 @@ public sealed class CombatTouchHUD : MonoBehaviour
 }
 
 [DisallowMultipleComponent]
-public sealed class CombatPointerDownButton : MonoBehaviour, IPointerDownHandler
+public sealed class CombatPointerDownButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
 {
     public event Action OnPointerDownEvent;
+    public event Action OnPointerUpEvent;
 
     public void OnPointerDown(PointerEventData eventData)
     {
@@ -166,5 +176,25 @@ public sealed class CombatPointerDownButton : MonoBehaviour, IPointerDownHandler
         }
 
         OnPointerDownEvent?.Invoke();
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        if (eventData == null)
+        {
+            return;
+        }
+
+        OnPointerUpEvent?.Invoke();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (eventData == null || !eventData.dragging)
+        {
+            return;
+        }
+
+        OnPointerUpEvent?.Invoke();
     }
 }

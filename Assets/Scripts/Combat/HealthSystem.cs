@@ -7,6 +7,7 @@ public sealed class HealthSystem : MonoBehaviour, IDamageable
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] private float invincibilityDuration = 0.2f;
 
+    private CombatController _combatController;
     private float _currentHealth;
     private float _invincibilityTimer;
     private bool _hasInvokedDeath;
@@ -23,6 +24,7 @@ public sealed class HealthSystem : MonoBehaviour, IDamageable
     {
         maxHealth = Mathf.Max(1f, maxHealth);
         _currentHealth = maxHealth;
+        _combatController = GetComponent<CombatController>();
     }
 
     private void Update()
@@ -38,6 +40,16 @@ public sealed class HealthSystem : MonoBehaviour, IDamageable
     public void TakeDamage(DamageInfo damage)
     {
         if (!IsAlive || damage.Amount <= 0f || _invincibilityTimer > 0f)
+        {
+            return;
+        }
+
+        if (_combatController == null)
+        {
+            _combatController = GetComponent<CombatController>();
+        }
+
+        if (_combatController != null && _combatController.TryConsumeIncomingDamage(damage))
         {
             return;
         }
