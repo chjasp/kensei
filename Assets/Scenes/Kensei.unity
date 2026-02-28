@@ -479,7 +479,7 @@ PrefabInstance:
     - target: {fileID: 5019589543755250820, guid: 766bd15567b5ec84aad59e5952d47b54, type: 3}
       propertyPath: m_Controller
       value: 
-      objectReference: {fileID: 9100000, guid: a3a348fc313b53a44ab5b8f348e2a5eb, type: 2}
+      objectReference: {fileID: 9100000, guid: 3403e552bde574581b458ed761774136, type: 2}
     - target: {fileID: 5019589543755250820, guid: 766bd15567b5ec84aad59e5952d47b54, type: 3}
       propertyPath: m_ApplyRootMotion
       value: 0
@@ -2059,6 +2059,8 @@ GameObject:
   - component: {fileID: 712931340}
   - component: {fileID: 712931339}
   - component: {fileID: 712931338}
+  - component: {fileID: 712931342}
+  - component: {fileID: 712931341}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -2187,9 +2189,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CombatController
   healthSystem: {fileID: 712931340}
   hitBox: {fileID: 1139388751}
-  weaponData: {fileID: 0}
+  weaponData: {fileID: 11400000, guid: 5661b63041cc4d7b995c80c6debb4114, type: 2}
   movementController: {fileID: 712931335}
   animator: {fileID: 96578404}
+  meleeAttackSystem: {fileID: 712931342}
 --- !u!114 &712931340
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2204,6 +2207,49 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HealthSystem
   maxHealth: 100
   invincibilityDuration: 0.2
+--- !u!114 &712931341
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 712931333}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed908bc97b6e34581a4f8f57e73ed7be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DebugCombatInput
+  meleeAttackSystem: {fileID: 712931342}
+--- !u!114 &712931342
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 712931333}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8fb640eea8b354a55a6a78dc4b85fbb5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MeleeAttackSystem
+  combatController: {fileID: 712931339}
+  animator: {fileID: 96578404}
+  hitBox: {fileID: 1139388751}
+  weaponData: {fileID: 11400000, guid: 5661b63041cc4d7b995c80c6debb4114, type: 2}
+  movementController: {fileID: 712931335}
+  characterController: {fileID: 712931336}
+  attackLungeForce: 2
+  combatLayerBlendSpeed: 10
+  comboTimings:
+  - swingStartTime: 0.22
+    swingEndTime: 0.56
+    animationEndTime: 0.9
+  - swingStartTime: 0.2
+    swingEndTime: 0.56
+    animationEndTime: 0.88
+  - swingStartTime: 0.26
+    swingEndTime: 0.62
+    animationEndTime: 0.92
 --- !u!1001 &749230626
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3318,7 +3364,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 041eb60808d84c07a91018a7895dc888, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HitBox
-  equippedWeaponData: {fileID: 0}
+  equippedWeaponData: {fileID: 11400000, guid: 5661b63041cc4d7b995c80c6debb4114, type: 2}
   baseDamage: 20
   damageType: 0
   targetLayers:

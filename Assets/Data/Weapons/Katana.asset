@@ -15,6 +15,6 @@ MonoBehaviour:
   weaponName: Katana
   baseDamage: 20
   attackRange: 2.2
-  comboResetTime: 0.8
+  comboResetTime: 0.7
   parryWindowDuration: 0.2
   damageType: 0

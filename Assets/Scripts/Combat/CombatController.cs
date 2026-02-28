@@ -19,10 +19,13 @@ public sealed class CombatController : MonoBehaviour
     [SerializeField] private WeaponData weaponData;
     [SerializeField] private PlayerMovementController movementController;
     [SerializeField] private Animator animator;
+    [SerializeField] private MeleeAttackSystem meleeAttackSystem;
 
     private CombatState _currentState = CombatState.Idle;
+    private float _lastAttackStartTime = -1f;
 
     public CombatState CurrentState => _currentState;
+    public float LastAttackStartTime => _lastAttackStartTime;
 
     public void SetReferences(
         HealthSystem healthSystemReference,
@@ -61,6 +64,24 @@ public sealed class CombatController : MonoBehaviour
         ApplyStateEffects();
     }
 
+    public void ResetCombat()
+    {
+        meleeAttackSystem?.ForceResetCombo();
+
+        if (hitBox != null)
+        {
+            hitBox.DisableHitBox();
+        }
+
+        if (_currentState == CombatState.Dead)
+        {
+            ApplyStateEffects();
+            return;
+        }
+
+        SetState(CombatState.Idle);
+    }
+
     public void SetState(CombatState newState)
     {
         if (_currentState == newState)
@@ -73,7 +94,17 @@ public sealed class CombatController : MonoBehaviour
             return;
         }
 
+        if (newState == CombatState.Attacking && IsAttackStateBlocked(_currentState))
+        {
+            return;
+        }
+
         _currentState = newState;
+        if (_currentState == CombatState.Attacking)
+        {
+            _lastAttackStartTime = Time.time;
+        }
+
         ApplyStateEffects();
     }
 
@@ -146,6 +177,11 @@ public sealed class CombatController : MonoBehaviour
             hitBox = GetComponentInChildren<HitBox>(includeInactive: true);
         }
 
+        if (meleeAttackSystem == null)
+        {
+            meleeAttackSystem = GetComponent<MeleeAttackSystem>();
+        }
+
         if (hitBox != null)
         {
             hitBox.SetSourceRoot(transform);
@@ -165,6 +201,7 @@ public sealed class CombatController : MonoBehaviour
         bool movementShouldBeLocked = _currentState == CombatState.Attacking
             || _currentState == CombatState.Parrying
             || _currentState == CombatState.StealthKill
+            || _currentState == CombatState.Stunned
             || _currentState == CombatState.Dead;
 
         if (movementController != null)
@@ -187,5 +224,13 @@ public sealed class CombatController : MonoBehaviour
 
         ResolveReferences();
         ApplyWeaponData();
+    }
+
+    private static bool IsAttackStateBlocked(CombatState state)
+    {
+        return state == CombatState.Parrying
+            || state == CombatState.StealthKill
+            || state == CombatState.Stunned
+            || state == CombatState.Dead;
     }
 }
