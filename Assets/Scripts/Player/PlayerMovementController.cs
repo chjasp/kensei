@@ -34,6 +34,7 @@ public sealed class PlayerMovementController : MonoBehaviour
     private float _verticalVelocity;
     private Vector2 _currentInput;
     private Vector3 _currentDesiredMove;
+    private bool _isMovementLocked;
     private bool _warnedMissingCamera;
     private bool _warnedMissingInput;
     private bool _warnedMissingMoveAction;
@@ -47,10 +48,21 @@ public sealed class PlayerMovementController : MonoBehaviour
     public Vector3 CurrentPlanarVelocity => _planarVelocity;
     public float CurrentVerticalVelocity => _verticalVelocity;
     public float VisualYawOffset => visualYawOffset;
+    public bool CanMove => !_isMovementLocked;
 
     public void SetVisualYawOffset(float yawDegrees)
     {
         visualYawOffset = yawDegrees;
+    }
+
+    public void SetMovementLocked(bool isLocked)
+    {
+        _isMovementLocked = isLocked;
+        if (_isMovementLocked)
+        {
+            _currentInput = Vector2.zero;
+            _currentDesiredMove = Vector3.zero;
+        }
     }
 
     public void SetDependencies(VirtualJoystick joystickReference, Transform cameraReference, Transform visualReference)
@@ -164,8 +176,19 @@ public sealed class PlayerMovementController : MonoBehaviour
             return;
         }
 
-        Vector2 input = ReadInput();
-        Vector3 desiredMove = ResolveMoveDirection(input);
+        Vector2 input;
+        Vector3 desiredMove;
+        if (_isMovementLocked)
+        {
+            input = Vector2.zero;
+            desiredMove = Vector3.zero;
+        }
+        else
+        {
+            input = ReadInput();
+            desiredMove = ResolveMoveDirection(input);
+        }
+
         _currentInput = input;
         _currentDesiredMove = desiredMove;
         Vector3 desiredPlanarVelocity = desiredMove * maxSpeed;

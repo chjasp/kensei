@@ -18,12 +18,26 @@ namespace Kensei.Editor
         private const string JoystickBackgroundName = "JoystickBackground";
         private const string JoystickHandleName = "JoystickHandle";
         private const string LookDragRegionName = "LookDragRegion";
+        private const string AttackButtonName = "AttackButton";
+        private const string ParryButtonName = "ParryButton";
+        private const string AttackLabelName = "Label";
+        private const string ParryLabelName = "Label";
+        private const string AttackLabelText = "ATK";
+        private const string ParryLabelText = "PRY";
         private const string InputActionsAssetPath = "Assets/InputSystem_Actions.inputactions";
+        private const string CombatAnimatorControllerAssetPath =
+            "Assets/Animation/Controllers/AC_Polygon_Masculine_Combat.controller";
         private const string SyntyAnimatorControllerAssetPath =
             "Assets/Synty/AnimationBaseLocomotion/Animations/Polygon/AC_Polygon_Masculine.controller";
         private const string SyntyCharactersModelAssetPath = "Assets/Synty/PolygonSamuraiEmpire/Models/Characters.fbx";
         private const string PlayerActionMapName = "Player";
         private const string MoveActionName = "Move";
+        private static readonly Vector2 AttackButtonSize = new Vector2(120f, 120f);
+        private static readonly Vector2 AttackButtonOffset = new Vector2(-72f, 72f);
+        private static readonly Vector2 ParryButtonSize = new Vector2(80f, 80f);
+        private static readonly Vector2 ParryButtonOffset = new Vector2(-172f, 162f);
+        private static readonly Color CombatButtonColor = new Color(1f, 1f, 1f, 0.5f);
+        private static readonly Color CombatLabelColor = new Color(0f, 0f, 0f, 0.88f);
 
         [MenuItem("Tools/Kensei/Apply Touch Locomotion Setup")]
         public static void ApplyFromMenu()
@@ -83,7 +97,10 @@ namespace Kensei.Editor
             Transform visualRoot = ResolveVisualRoot(player.transform);
 
             EnsureEventSystem();
-            VirtualJoystick joystick = EnsureTouchHud(out TouchLookDragRegion lookDragRegion);
+            VirtualJoystick joystick = EnsureTouchHud(
+                player,
+                out TouchLookDragRegion lookDragRegion,
+                out CombatTouchHUD combatTouchHUD);
 
             InputActionAsset inputActions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsAssetPath);
             if (inputActions == null)
@@ -130,6 +147,10 @@ namespace Kensei.Editor
             if (lookDragRegion != null)
             {
                 EditorUtility.SetDirty(lookDragRegion);
+            }
+            if (combatTouchHUD != null)
+            {
+                EditorUtility.SetDirty(combatTouchHUD);
             }
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -189,15 +210,31 @@ namespace Kensei.Editor
                 animator = visualRoot.gameObject.AddComponent<Animator>();
             }
 
-            RuntimeAnimatorController controller =
+            RuntimeAnimatorController combatController =
+                AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(CombatAnimatorControllerAssetPath);
+            RuntimeAnimatorController baseController =
                 AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(SyntyAnimatorControllerAssetPath);
-            if (controller == null)
+
+            RuntimeAnimatorController selectedController = ResolvePreferredAnimatorController(
+                animator.runtimeAnimatorController,
+                combatController,
+                baseController);
+
+            if (selectedController == null)
             {
-                Debug.LogWarning($"Could not load Synty animator controller at '{SyntyAnimatorControllerAssetPath}'.");
+                Debug.LogWarning(
+                    $"Could not load animator controllers at '{CombatAnimatorControllerAssetPath}' or '{SyntyAnimatorControllerAssetPath}'.");
             }
-            else
+            else if (!ReferenceEquals(animator.runtimeAnimatorController, selectedController))
             {
-                animator.runtimeAnimatorController = controller;
+                animator.runtimeAnimatorController = selectedController;
+            }
+
+            if (combatController == null && baseController != null && ReferenceEquals(selectedController, baseController))
+            {
+                Debug.LogWarning(
+                    $"Combat animator controller missing at '{CombatAnimatorControllerAssetPath}'. " +
+                    $"Falling back to '{SyntyAnimatorControllerAssetPath}'.");
             }
 
             if (animator.avatar == null || !animator.avatar.isValid || !animator.avatar.isHuman)
@@ -218,6 +255,63 @@ namespace Kensei.Editor
             animator.applyRootMotion = false;
             animator.enabled = true;
             return animator;
+        }
+
+        private static RuntimeAnimatorController ResolvePreferredAnimatorController(
+            RuntimeAnimatorController currentController,
+            RuntimeAnimatorController combatController,
+            RuntimeAnimatorController baseController)
+        {
+            if (IsCombatController(currentController, combatController))
+            {
+                return currentController;
+            }
+
+            if (currentController == null || IsBaseSyntyController(currentController, baseController))
+            {
+                if (combatController != null)
+                {
+                    return combatController;
+                }
+
+                return baseController;
+            }
+
+            return currentController;
+        }
+
+        private static bool IsCombatController(RuntimeAnimatorController controller, RuntimeAnimatorController loadedCombatController)
+        {
+            if (controller == null)
+            {
+                return false;
+            }
+
+            if (loadedCombatController != null && ReferenceEquals(controller, loadedCombatController))
+            {
+                return true;
+            }
+
+            string path = AssetDatabase.GetAssetPath(controller);
+            return !string.IsNullOrEmpty(path)
+                   && string.Equals(path, CombatAnimatorControllerAssetPath, System.StringComparison.Ordinal);
+        }
+
+        private static bool IsBaseSyntyController(RuntimeAnimatorController controller, RuntimeAnimatorController loadedBaseController)
+        {
+            if (controller == null)
+            {
+                return false;
+            }
+
+            if (loadedBaseController != null && ReferenceEquals(controller, loadedBaseController))
+            {
+                return true;
+            }
+
+            string path = AssetDatabase.GetAssetPath(controller);
+            return !string.IsNullOrEmpty(path)
+                   && string.Equals(path, SyntyAnimatorControllerAssetPath, System.StringComparison.Ordinal);
         }
 
         private static Avatar ResolveHumanoidAvatar()
@@ -309,7 +403,10 @@ namespace Kensei.Editor
                    inputSystemUiInputModule.cancel.action == null;
         }
 
-        private static VirtualJoystick EnsureTouchHud(out TouchLookDragRegion lookDragRegion)
+        private static VirtualJoystick EnsureTouchHud(
+            GameObject player,
+            out TouchLookDragRegion lookDragRegion,
+            out CombatTouchHUD combatTouchHUD)
         {
             GameObject canvasObject = GameObject.Find(CanvasName);
             if (canvasObject == null)
@@ -325,6 +422,8 @@ namespace Kensei.Editor
             canvasRect.pivot = new Vector2(0.5f, 0.5f);
             canvasRect.anchoredPosition = Vector2.zero;
             canvasRect.sizeDelta = Vector2.zero;
+            canvasRect.offsetMin = Vector2.zero;
+            canvasRect.offsetMax = Vector2.zero;
             canvasRect.localScale = Vector3.one;
 
             Canvas canvas = canvasObject.GetComponent<Canvas>();
@@ -457,7 +556,137 @@ namespace Kensei.Editor
             joystick.SetVisualReferences(backgroundRect, handleRect);
             joystick.SetTuning(90f, 0.12f, 20f, true);
 
+            MeleeAttackSystem meleeAttackSystem = player != null ? player.GetComponent<MeleeAttackSystem>() : null;
+            CombatController combatController = player != null ? player.GetComponent<CombatController>() : null;
+            combatTouchHUD = EnsureCombatTouchHud(canvasObject, meleeAttackSystem, combatController);
+
             return joystick;
+        }
+
+        private static CombatTouchHUD EnsureCombatTouchHud(
+            GameObject canvasObject,
+            MeleeAttackSystem meleeAttackSystem,
+            CombatController combatController)
+        {
+            if (canvasObject == null)
+            {
+                return null;
+            }
+
+            GameObject attackButtonObject = FindOrCreateChild(canvasObject.transform, AttackButtonName);
+            attackButtonObject.layer = LayerMask.NameToLayer("UI");
+            RectTransform attackRect = EnsureRectTransform(attackButtonObject);
+            attackRect.anchorMin = new Vector2(1f, 0f);
+            attackRect.anchorMax = new Vector2(1f, 0f);
+            attackRect.pivot = new Vector2(1f, 0f);
+            attackRect.anchoredPosition = AttackButtonOffset;
+            attackRect.sizeDelta = AttackButtonSize;
+            attackRect.localScale = Vector3.one;
+
+            ConfigureCombatButtonVisual(
+                attackButtonObject,
+                attackRect,
+                AttackLabelName,
+                AttackLabelText,
+                fontSize: 36);
+
+            CombatPointerDownButton attackPointerDownButton =
+                GetOrAddComponent<CombatPointerDownButton>(attackButtonObject);
+
+            GameObject parryButtonObject = FindOrCreateChild(canvasObject.transform, ParryButtonName);
+            parryButtonObject.layer = LayerMask.NameToLayer("UI");
+            RectTransform parryRect = EnsureRectTransform(parryButtonObject);
+            parryRect.anchorMin = new Vector2(1f, 0f);
+            parryRect.anchorMax = new Vector2(1f, 0f);
+            parryRect.pivot = new Vector2(1f, 0f);
+            parryRect.anchoredPosition = ParryButtonOffset;
+            parryRect.sizeDelta = ParryButtonSize;
+            parryRect.localScale = Vector3.one;
+
+            ConfigureCombatButtonVisual(
+                parryButtonObject,
+                parryRect,
+                ParryLabelName,
+                ParryLabelText,
+                fontSize: 24);
+
+            CombatPointerDownButton parryPointerDownButton =
+                GetOrAddComponent<CombatPointerDownButton>(parryButtonObject);
+
+            attackRect.SetAsLastSibling();
+            parryRect.SetAsLastSibling();
+
+            CombatTouchHUD combatTouchHUD = GetOrAddComponent<CombatTouchHUD>(canvasObject);
+            combatTouchHUD.SetReferences(
+                meleeAttackSystem,
+                combatController,
+                attackPointerDownButton,
+                parryPointerDownButton);
+            return combatTouchHUD;
+        }
+
+        private static void ConfigureCombatButtonVisual(
+            GameObject buttonObject,
+            RectTransform buttonRect,
+            string labelObjectName,
+            string labelText,
+            int fontSize)
+        {
+            if (buttonObject.GetComponent<CanvasRenderer>() == null)
+            {
+                buttonObject.AddComponent<CanvasRenderer>();
+            }
+
+            Image buttonImage = GetOrAddComponent<Image>(buttonObject);
+            buttonImage.color = CombatButtonColor;
+            buttonImage.raycastTarget = true;
+
+            Sprite circleSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+            if (circleSprite != null)
+            {
+                buttonImage.sprite = circleSprite;
+                buttonImage.type = Image.Type.Simple;
+                buttonImage.preserveAspect = true;
+            }
+
+            Button button = GetOrAddComponent<Button>(buttonObject);
+            button.transition = Selectable.Transition.None;
+            button.targetGraphic = buttonImage;
+
+            GameObject labelObject = FindOrCreateChild(buttonRect, labelObjectName);
+            labelObject.layer = LayerMask.NameToLayer("UI");
+            RectTransform labelRect = EnsureRectTransform(labelObject);
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.pivot = new Vector2(0.5f, 0.5f);
+            labelRect.anchoredPosition = Vector2.zero;
+            labelRect.sizeDelta = Vector2.zero;
+            labelRect.localScale = Vector3.one;
+
+            if (labelObject.GetComponent<CanvasRenderer>() == null)
+            {
+                labelObject.AddComponent<CanvasRenderer>();
+            }
+
+            Text label = GetOrAddComponent<Text>(labelObject);
+            label.text = labelText;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = CombatLabelColor;
+            label.raycastTarget = false;
+            label.resizeTextForBestFit = false;
+            label.fontSize = fontSize;
+            label.fontStyle = FontStyle.Bold;
+
+            Font labelFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (labelFont == null)
+            {
+                labelFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+
+            if (labelFont != null)
+            {
+                label.font = labelFont;
+            }
         }
 
         private static GameObject FindOrCreateChild(Transform parent, string childName)
@@ -492,6 +721,17 @@ namespace Kensei.Editor
             }
 
             return rectTransform;
+        }
+
+        private static T GetOrAddComponent<T>(GameObject targetObject) where T : Component
+        {
+            T component = targetObject.GetComponent<T>();
+            if (component == null)
+            {
+                component = targetObject.AddComponent<T>();
+            }
+
+            return component;
         }
     }
 }
